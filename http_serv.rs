@@ -114,6 +114,12 @@ fn main() {
                     let mut file_path = cwd.clone();
 
                     file_path.push(file_path_str);
+
+                    if !file_path.exists(){
+                        not_found(stream);
+                        return;
+                    }
+
                     if !cwd.is_ancestor_of(&file_path){
                         forbidden(stream);
                         return;
