@@ -51,6 +51,7 @@ fn main() {
         println!("list files:{}", file_path.display());
         let mut res = ~[~"HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n
                         <html><head><title>folder</title><body><ul>"];
+        res.push(~"<li><a href=\"..\">..</a></li>");
         match fs::readdir(file_path){
             Ok(paths)=>{
                 for file in paths.iter() {
@@ -91,11 +92,11 @@ fn main() {
             
             match stream {
                 Ok(ref mut s) => {
-                             match s.peer_name() {
-                                Ok(pn) => {println(format!("Received connection from: [{:s}]", pn.to_str()));},
-                                _ => ()
-                             }
-                           },
+                    match s.peer_name() {
+                        Ok(pn) => {println(format!("Received connection from: [{:s}]", pn.to_str()));},
+                        _ => ()
+                    }
+                },
                 _ => ()
             }
             
