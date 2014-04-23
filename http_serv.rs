@@ -1,12 +1,14 @@
 // Running on Rust 0.11
 
-#[feature(globs)];
+#![feature(globs)]
+#![feature(phase)]
+#[phase(syntax, link)] extern crate log;
+extern crate url;
+
 use std::io::*;
-use std::io::fs::Directories;
 use std::io::net::ip::{SocketAddr};
 use std::{str};
 use std::os;
-use std::fmt;
 
 static IP: &'static str = "127.0.0.1";
 static PORT:        int = 4414;
@@ -14,7 +16,7 @@ static PORT:        int = 4414;
 fn main() {
     let addr = from_str::<SocketAddr>(format!("{:s}:{:d}", IP, PORT)).unwrap();
     let mut acceptor = net::tcp::TcpListener::bind(addr).listen();
-    println(format!("Listening on [{:s}] ...", addr.to_str()));
+    info!("Listening on [{:s}] ...", addr.to_str());
     
 
     fn not_found(mut stream:IoResult<TcpStream>){
@@ -30,6 +32,7 @@ fn main() {
     }
 
     fn serv(mut stream:IoResult<TcpStream>, file_path:&Path){
+        info!("serve file: {}", file_path.display());
         let resource_file = File::open(file_path);//File::open(&Path::new(file_path));
         match resource_file {
             Ok(mut res_byte) => {
@@ -48,36 +51,28 @@ fn main() {
     }
 
     fn dir(mut stream:IoResult<TcpStream>, file_path:&Path){
-        println!("list files:{}", file_path.display());
+        info!("list files:{}", file_path.display());
         let mut res = ~[~"HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n
                         <html><head><title>folder</title><body><ul>"];
         res.push(~"<li><a href=\"..\">..</a></li>");
-        match fs::readdir(file_path){
-            Ok(paths)=>{
-                for file in paths.iter() {
-                    
-                    match file.filename() {
-                        Some(name)=>{
-                            match str::from_utf8(name) {
-                                Some(name_str)=>{
-                                    
-                                    if file.is_dir(){
-                                        let mut li:~str = ~"<li><a href=\""+name_str+"/\">"+name_str+~"</a></li>";
-                                        res.push(li);
-                                    }else{
-                                        let mut li:~str = ~"<li><a href=\""+name_str+"\">"+name_str+~"</a></li>";
-                                        res.push(li);
-                                    }
-                                },
-                                None=>()
+       
+        for file in fs::readdir(file_path).unwrap().iter() {
+
+            let filename = file.filename().map(|filename| str::from_utf8(filename));
+            match filename {
+                Some(Some(filename))=>{
+                    res.push("<li><a href=\""+filename
+                            +match file.is_dir(){
+                                true=>~"/",
+                                false=>~""
                             }
-                        },
-                        None=>()
-                    }
-                }
-            },
-            _=>()
-        };
+                            +"\">"+filename+"</a></li>");
+                },
+                _=>{ error!("error getting filename!");}
+            }
+            
+        }
+           
         res.push(~"</ul></body>");
         for r in res.iter() {
             stream.write(r.as_bytes());
@@ -89,11 +84,11 @@ fn main() {
         spawn (proc(){
 
             let mut stream = stream;
-            
+
             match stream {
                 Ok(ref mut s) => {
                     match s.peer_name() {
-                        Ok(pn) => {println(format!("Received connection from: [{:s}]", pn.to_str()));},
+                        Ok(pn) => {info!("Received connection from: [{}]", pn.to_str());},
                         _ => ()
                     }
                 },
@@ -107,14 +102,18 @@ fn main() {
 
             match request_str {
                 Some(req_str) =>{
-                    println(format!("Received request :\n{:s}", req_str));
-                    //serv file
+                    info!("Received request :\n{}", req_str);
+
                     let path_line: ~[&str]= req_str.split(' ').collect();
-                    let file_path_str = path_line[1].slice_from(1);
+                    if path_line.len()<2{
+                        return;
+                    }
+                    let file_path_str = url::decode_component(path_line[1].slice_from(1));
                     let mut file_path = cwd.clone();
 
                     file_path.push(file_path_str);
 
+                    info!("Path request: {}", file_path.display());
                     if !file_path.exists(){
                         not_found(stream);
                         return;
